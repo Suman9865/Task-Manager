@@ -188,3 +188,7 @@ This project focuses on building a strong foundation in backend development:
 - Every request has a traceable request ID.
 - Business logic remains independent of FastAPI and the database.
 - Swagger documentation clearly describes all endpoints.
+
+## Project Status
+
+Currently under development.
