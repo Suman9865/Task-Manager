@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from app.schemas import TaskCreate, TaskResponse, TaskUpdate, TaskPatch
 from app.database import engine, Base, get_db
 from app.models import Task
@@ -55,9 +55,20 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     return db_task
 
 @app.get("/tasks", response_model=list[TaskResponse])
-def get_tasks(db: Session = Depends(get_db)):
+def get_tasks(
+    status: str | None = None,
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Task)
 
-    tasks = db.query(Task).all()
+    # Filter by status
+    if status:
+        query = query.filter(Task.status == status)
+
+    # Apply pagination
+    tasks = query.order_by(Task.id).offset(offset).limit(limit).all()
 
     return tasks
 

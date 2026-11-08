@@ -3,6 +3,22 @@ from datetime import date
 from typing import Optional
 from enum import Enum
 
+class TaskValidation(BaseModel):
+    
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value):
+        if not value.strip():
+            raise ValueError("Title cannot be empty")
+        return value.strip()
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, value):
+        if value is not None and value < date.today():
+            raise ValueError("Due date cannot be in the past")
+        return value
+        
 class TaskStatus(str, Enum):
     pending = "pending"
     in_progress = "in_progress"
