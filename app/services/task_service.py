@@ -3,27 +3,22 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Task
-from app.schemas import TaskCreate, TaskResponse, TaskUpdate, TaskPatch
+from app.schemas import TaskCreate, TaskUpdate, TaskPatch
+from app.repositories import task_repository
+from app.exceptions.task_exceptions import (
+    TaskAlreadyExistsError,
+    TaskNotFoundError,
+    TaskTitleChangeError,
+    TaskDeletionError
+)
 
-
-class TaskAlreadyExistsError(Exception):
-    pass
-
-class TaskNotFoundError(Exception):
-    pass
-
-class TaskTitleChangeError(Exception):
-    pass
-
-class TaskDeletionError(Exception):
-    pass
 
 def create_task(db: Session, task_data: TaskCreate):
 
     # Check whether task title already exists
-    existing_task = db.query(Task).filter(
-        Task.title == task_data.title
-    ).first()
+    existing_task = task_repository.get_by_title(
+        db, task_data.title
+    )
 
     if existing_task:
         raise TaskAlreadyExistsError(
@@ -39,19 +34,14 @@ def create_task(db: Session, task_data: TaskCreate):
     )
 
     try:
-        # Save task to database
-        db.add(db_task)
-        db.commit()
-        db.refresh(db_task)
+        # Save task using repository
+        return task_repository.create(db, db_task)
 
     except IntegrityError as exc:
-        db.rollback()
-
         raise TaskAlreadyExistsError(
             "A task with this title already exists"
         ) from exc
 
-    return db_task
 
 def get_tasks(
     db: Session,
@@ -59,21 +49,18 @@ def get_tasks(
     limit: int = 10,
     offset: int = 0
 ):
-    query = db.query(Task)
+    return task_repository.get_all(
+        db=db,
+        status=status,
+        limit=limit,
+        offset=offset
+    )
 
-    # Filter by status
-    if status:
-        query = query.filter(Task.status == status)
-
-    # Apply pagination
-    tasks = query.order_by(Task.id).offset(offset).limit(limit).all()
-
-    return tasks
 
 def get_task(task_id: int, db: Session):
 
     # Find task by ID
-    task = db.query(Task).filter(Task.id == task_id).first()
+    task = task_repository.get_by_id(db, task_id)
 
     # Check whether task exists
     if task is None:
@@ -84,7 +71,7 @@ def get_task(task_id: int, db: Session):
 def update_task(db: Session, task_id: int, task_data: TaskUpdate):
 
     # Find the existing task
-    task = db.query(Task).filter(Task.id == task_id).first()
+    task = task_repository.get_by_id(db, task_id)
 
     if task is None:
         raise TaskNotFoundError("Task not found")
@@ -103,22 +90,18 @@ def update_task(db: Session, task_id: int, task_data: TaskUpdate):
     task.due_date = task_data.due_date
 
     try:
-        db.commit()
-        db.refresh(task)
+        return task_repository.save(db, task)
 
     except IntegrityError as exc:
-        db.rollback()
         raise TaskAlreadyExistsError(
             "A task with this title already exists"
         ) from exc
-
-    return task
 
 
 def patch_task(db: Session, task_id: int, task_data: TaskPatch):
 
     # Find the existing task
-    task = db.query(Task).filter(Task.id == task_id).first()
+    task = task_repository.get_by_id(db, task_id)
 
     if task is None:
         raise TaskNotFoundError("Task not found")
@@ -139,31 +122,24 @@ def patch_task(db: Session, task_id: int, task_data: TaskPatch):
         setattr(task, key, value)
 
     try:
-        db.commit()
-        db.refresh(task)
+        return task_repository.save(db, task)
 
     except IntegrityError as exc:
-        db.rollback()
         raise TaskAlreadyExistsError(
             "A task with this title already exists"
         ) from exc
 
-    return task
-
 def delete_task(db: Session, task_id: int):
 
     # Find the existing task
-    task = db.query(Task).filter(Task.id == task_id).first()
+    task = task_repository.get_by_id(db, task_id)
 
     if task is None:
         raise TaskNotFoundError("Task not found")
 
     try:
         # Delete the task
-        db.delete(task)
-
-        # Save changes to database
-        db.commit()
+        return task_repository.delete(db, task)
 
     except IntegrityError as exc:
         db.rollback()
@@ -171,8 +147,3 @@ def delete_task(db: Session, task_id: int):
         raise TaskDeletionError(
             "Unable to delete task"
         ) from exc
-
-    return {
-        "message": "Task deleted successfully",
-        "task": task
-    }

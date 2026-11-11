@@ -1,27 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
 from app.schemas import TaskCreate, TaskResponse, TaskUpdate, TaskPatch
 from app.database import get_db
-from app.models import Task
 from app.services.task_service import (
     create_task as create_task_service,
-    TaskAlreadyExistsError
-)
-from app.services.task_service import get_tasks as get_tasks_service
-from app.services.task_service import (get_task as get_task_service, TaskNotFoundError)
-from app.services.task_service import (
+    get_tasks as get_tasks_service,
+    get_task as get_task_service,
     update_task as update_task_service,
-    TaskNotFoundError,
-    TaskAlreadyExistsError, TaskTitleChangeError
-)
-from app.services.task_service import patch_task as patch_task_service
-from app.services.task_service import (
+    patch_task as patch_task_service,
     delete_task as delete_task_service,
+)
+from app.exceptions.task_exceptions import (
+    TaskAlreadyExistsError,
     TaskNotFoundError,
+    TaskTitleChangeError,
     TaskDeletionError
 )
+
 
 router = APIRouter()
 
