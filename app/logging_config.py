@@ -1,5 +1,14 @@
+
 import logging
 import logging.config
+
+from app.request_context import get_request_id
+
+
+class RequestIDFilter(logging.Filter):
+    def filter(self, record):
+        record.request_id = get_request_id()
+        return True
 
 
 def setup_logging():
@@ -7,9 +16,18 @@ def setup_logging():
         "version": 1,
         "disable_existing_loggers": False,
 
+        "filters": {
+            "request_id": {
+                "()": RequestIDFilter
+            }
+        },
+
         "formatters": {
             "standard": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                "format": (
+                    "%(asctime)s - %(name)s - %(levelname)s - "
+                    "[Request ID: %(request_id)s] - %(message)s"
+                )
             }
         },
 
@@ -17,6 +35,7 @@ def setup_logging():
             "console": {
                 "class": "logging.StreamHandler",
                 "formatter": "standard",
+                "filters": ["request_id"],
                 "level": "DEBUG"
             }
         },

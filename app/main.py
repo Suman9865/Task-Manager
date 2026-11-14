@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import engine, Base
-from app.exceptions import (
+from app.exceptions.task_exceptions import (
     TaskAlreadyExistsError,
     TaskNotFoundError,
     TaskTitleChangeError,
@@ -14,7 +14,7 @@ from app.exceptions import (
 )
 from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
-
+from app.middleware.request_id import RequestIDMiddleware
 
 # Initialize logging
 setup_logging()
@@ -31,6 +31,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
 )
+
+# Register middleware
+app.add_middleware(RequestIDMiddleware)
 
 logger.info("Task Manager API application initialized")
 
