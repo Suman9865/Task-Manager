@@ -16,9 +16,12 @@ from app.services.task_service import (
     delete_task as delete_task_service,
 )
 
+from app.models.user import User
+from app.core.dependencies import get_current_user
+
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Tasks"])
 
 
 @router.post("/tasks", response_model=TaskResponse)
@@ -34,12 +37,13 @@ def get_tasks(
     status: str | None = None,
     limit: int = Query(default=10, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
 
     logger.info("GET /tasks - Request received")
 
-    return get_tasks_service(db, status, limit, offset)
+    return get_tasks_service(db, status, limit, offset, current_user.id)
 
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)

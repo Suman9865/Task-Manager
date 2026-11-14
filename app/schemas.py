@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, EmailStr
 from datetime import date
 from typing import Optional
 from enum import Enum
@@ -94,3 +94,40 @@ class TaskPatch(BaseModel):
         if value is not None and value < date.today():
             raise ValueError("Due date cannot be in the past")
         return value
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    email: EmailStr = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=8)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("Username cannot be empty")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value):
+        value = value.strip().lower()
+        if not value:
+            raise ValueError("Email cannot be empty")
+        return value
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UserLogin(BaseModel):
+    email: EmailStr = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=8)
+
+class LoginEmail(BaseModel):
+    email: EmailStr

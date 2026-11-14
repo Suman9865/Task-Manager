@@ -3,7 +3,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.models import Task
+from app.models.task import Task
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +39,20 @@ def create(db: Session, task: Task):
 
 def get_all(
     db: Session,
+    user_id: int,
     status: str | None = None,
     limit: int = 10,
     offset: int = 0
 ):
     logger.info(
-        "Fetching tasks - status: %s, limit: %s, offset: %s",
+        "Fetching tasks - status: %s, limit: %s, offset: %s, user_id: %s",
         status,
         limit,
-        offset
+        offset,
+        user_id
     )
 
-    query = db.query(Task)
+    query = db.query(Task).filter(Task.user_id == user_id)
 
     if status:
         query = query.filter(Task.status == status)

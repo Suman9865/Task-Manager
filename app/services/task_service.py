@@ -4,7 +4,7 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Task
+from app.models.task import Task
 from app.schemas import TaskCreate, TaskUpdate, TaskPatch
 from app.repositories import task_repository
 from app.exceptions.task_exceptions import (
@@ -72,20 +72,23 @@ def create_task(db: Session, task_data: TaskCreate):
 
 def get_tasks(
     db: Session,
+    user_id: int,
     status: str | None = None,
     limit: int = 10,
     offset: int = 0
 ):
 
     logger.info(
-        "Processing task list request - status: %s, limit: %s, offset: %s",
+        "Processing task list request - status: %s, limit: %s, offset: %s, user_id: %s",
         status,
         limit,
-        offset
+        offset,
+        user_id
     )
 
     return task_repository.get_all(
         db=db,
+        user_id=user_id,
         status=status,
         limit=limit,
         offset=offset
