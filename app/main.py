@@ -1,5 +1,6 @@
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,26 +17,50 @@ from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
 from app.middleware.request_id import RequestIDMiddleware
 
+
 # Initialize logging
 setup_logging()
 
 logger = logging.getLogger(__name__)
 
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# ----------------------------------------
+# Lifespan Management
+# ----------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    # Startup
+    logger.info("Starting Task Manager API application")
+
+    Base.metadata.create_all(bind=engine)
+
+    logger.info("Database tables initialized successfully")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down Task Manager API application")
+
+    engine.dispose()
+
+    logger.info("Database connections closed successfully")
 
 
-# Initialize FastAPI application
+# ----------------------------------------
+# Initialize FastAPI Application
+# ----------------------------------------
+
 app = FastAPI(
     title=settings.APP_NAME,
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
+    lifespan=lifespan
 )
+
 
 # Register middleware
 app.add_middleware(RequestIDMiddleware)
-
-logger.info("Task Manager API application initialized")
 
 
 # Register task routes
