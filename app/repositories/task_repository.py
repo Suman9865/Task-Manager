@@ -26,19 +26,15 @@ def get_by_title(db: Session, title: str):
 def create(db: Session, task: Task):
     logger.info("Creating new task: %s", task.title)
 
-    try:
-        db.add(task)
-        db.commit()
-        db.refresh(task)
+    db.add(task)
+    db.flush()
 
-        logger.info("Task created successfully with ID: %s", task.id)
+    logger.info(
+        "Task added to database session with ID: %s",
+        task.id
+    )
 
-        return task
-
-    except Exception:
-        db.rollback()
-        logger.exception("Failed to create task")
-        raise
+    return task
 
 
 def get_all(

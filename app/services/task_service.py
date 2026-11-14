@@ -16,51 +16,58 @@ from app.exceptions.task_exceptions import (
 
 logger = logging.getLogger(__name__)
 
-
 def create_task(db: Session, task_data: TaskCreate):
 
     logger.info("Processing task creation request")
 
-    # Check whether task title already exists
-    existing_task = task_repository.get_by_title(
-        db, task_data.title
-    )
-
-    if existing_task:
-        logger.warning(
-            "Task creation rejected: title already exists - %s",
-            task_data.title
-        )
-        raise TaskAlreadyExistsError(
-            "A task with this title already exists"
-        )
-
-    # Convert Pydantic schema into SQLAlchemy model
-    db_task = Task(
-        title=task_data.title,
-        description=task_data.description,
-        status=task_data.status,
-        due_date=task_data.due_date
-    )
-
     try:
-        # Save task using repository
+        # Check whether task title already exists
+        existing_task = task_repository.get_by_title(
+            db, task_data.title
+        )
+
+        if existing_task:
+            raise TaskAlreadyExistsError(
+                "A task with this title already exists"
+            )
+
+        # Create SQLAlchemy model
+        db_task = Task(
+            title=task_data.title,
+            description=task_data.description,
+            status=task_data.status,
+            due_date=task_data.due_date
+        )
+
+        # Add task through repository
         created_task = task_repository.create(db, db_task)
 
+        # Commit transaction
+        db.commit()
+
+        # Refresh task
+        db.refresh(created_task)
+
         logger.info(
-            "Task creation completed with ID: %s",
+            "Task created successfully with ID: %s",
             created_task.id
         )
 
         return created_task
 
     except IntegrityError as exc:
-        logger.warning(
-            "Task creation failed due to a database integrity constraint"
-        )
+        db.rollback()
+
+        logger.warning("Task creation failed due to integrity error")
+
         raise TaskAlreadyExistsError(
             "A task with this title already exists"
         ) from exc
+
+    except Exception:
+        db.rollback()
+        logger.exception("Task creation failed")
+        raise
 
 
 def get_tasks(
