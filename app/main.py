@@ -13,7 +13,7 @@ from app.exceptions.task_exceptions import (
     TaskTitleChangeError,
     TaskDeletionError,
 )
-from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError, RateLimitExceededError, AuthenticationError
+from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError, RateLimitExceededError, AuthenticationError, ServiceUnavailableError
 from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
 from app.middleware.request_id import RequestIDMiddleware
@@ -195,6 +195,22 @@ async def authentication_exception_handler(request: Request, exc: Authentication
         status_code=401,
         content={"detail": exc.message},
         headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
+@app.exception_handler(ServiceUnavailableError)
+async def service_unavailable_handler(
+    request: Request,
+    exc: ServiceUnavailableError
+):
+    logger.error("Service unavailable: %s", exc.message)
+
+    return JSONResponse(
+        status_code=503,
+        content={"detail": exc.message},
+        headers={
+            "Retry-After": str(exc.retry_after)
+        }
     )
 
 
