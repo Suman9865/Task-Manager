@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.database import get_db
-from app.schemas import UserCreate, UserResponse, UserLogin, LoginEmail
-from app.services.auth_service import (register_user, login_user)
+from app.schemas import UserCreate, UserResponse, UserLogin, LoginEmail, RefreshTokenRequest
+from app.services.auth_service import (register_user, login_user, refresh_user_tokens)
 
 logger = logging.getLogger(__name__)
 
@@ -24,3 +24,16 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 def login(user_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     logger.info("POST /auth/login - Request received")
     return login_user(db,user_data.username,user_data.password)
+
+
+@router.post("/refresh")
+def refresh(
+    token_data: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    logger.info("POST /auth/refresh - Request received")
+
+    return refresh_user_tokens(
+        db,
+        token_data.refresh_token
+    )

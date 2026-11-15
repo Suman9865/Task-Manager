@@ -1,6 +1,6 @@
 import redis
 
-from app.config import settings
+from app.core.config import settings
 
 import logging
 

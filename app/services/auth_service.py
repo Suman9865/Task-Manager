@@ -9,9 +9,10 @@ from app.repositories import user_repository
 from app.core.security import hash_password, verify_password
 from app.exceptions.user_exceptions import InvalidEmailFormatError, UserAlreadyExistsError, InvalidCredentialsError
 from app.models.user import User
-from app.core.token import create_access_token, create_refresh_token
+from app.core.token import create_access_token, create_refresh_token, validate_refresh_token
 from pydantic import ValidationError
-from app.services.refresh_token_service import store_refresh_token
+from app.core.redis import redis_client
+from app.services.refresh_token_service import store_refresh_token, rotate_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -109,4 +110,54 @@ def login_user(db: Session, email: str, password: str):
         "refresh_token": refresh_token,
         "token_type": "bearer"
     }
+
+
+def refresh_user_tokens(db: Session, old_refresh_token: str):
+
+    logger.info("Refresh token request received")
+
+    # 1. Check whether the refresh token exists in Redis
+    user_id = validate_refresh_token(
+        redis_client,
+        old_refresh_token
+    )
+
+    if not user_id:
+        logger.warning("Invalid or expired refresh token")
+        raise InvalidCredentialsError("Invalid or expired refresh token")
+
+    # 2. Find the user in the database
+    user = user_repository.get_by_id(db, int(user_id))
+
+    if not user or not user.is_active:
+        logger.warning("Refresh failed: user not found or inactive")
+        raise InvalidCredentialsError("Invalid refresh token")
+
+    # 3. Generate a new refresh token
+    new_refresh_token = create_refresh_token()
+
+    # 4. Atomically replace the old refresh token in Redis
+    rotated_user_id = rotate_refresh_token(
+        old_refresh_token,
+        new_refresh_token
+    )
+
+    if not rotated_user_id:
+        logger.warning("Refresh token already used or expired")
+        raise InvalidCredentialsError("Invalid or expired refresh token")
+
+    # 5. Generate a new access token
+    access_token = create_access_token(
+        user_id=int(rotated_user_id)
+    )
+
+    logger.info("Tokens refreshed successfully for user ID: %s", user.id)
+
+    # 6. Return the new token pair
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer"
+    }
+
 
