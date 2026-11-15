@@ -21,3 +21,8 @@ class RateLimitExceededError(Exception):
         self.limit = limit
 
         super().__init__(message)
+        
+class AuthenticationError(Exception):
+    def __init__(self, message: str = "Could not validate credentials"):
+        self.message = message
+        super().__init__(self.message)

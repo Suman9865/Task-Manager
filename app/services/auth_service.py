@@ -13,6 +13,7 @@ from app.core.token import create_access_token, create_refresh_token, validate_r
 from pydantic import ValidationError
 from app.core.redis import redis_client
 from app.services.refresh_token_service import store_refresh_token, rotate_refresh_token, revoke_refresh_token
+from app.services.session_service import create_session, get_session, revoke_session
 
 logger = logging.getLogger(__name__)
 
@@ -93,14 +94,17 @@ def login_user(db: Session, email: str, password: str):
         logger.warning("Login failed: incorrect password")
         raise InvalidCredentialsError("Invalid email or password")
 
-    # 5. Generate JWT access token
-    access_token = create_access_token(user_id=user.id)
+    # Create a Redis session
+    session_id = create_session(user_id=user.id)
+
+    # Generate access token associated with this session
+    access_token = create_access_token(user_id=user.id, session_id=session_id)
 
     # Generate refresh token
     refresh_token = create_refresh_token()
 
     # Store refresh token in Redis
-    store_refresh_token(user_id=user.id, refresh_token=refresh_token)
+    store_refresh_token(user_id=user.id, session_id=session_id, refresh_token=refresh_token)
 
     logger.info("User login successful. User ID: %s", user.id)
 
@@ -116,15 +120,25 @@ def refresh_user_tokens(db: Session, old_refresh_token: str):
 
     logger.info("Refresh token request received")
 
-    # 1. Check whether the refresh token exists in Redis
-    user_id = validate_refresh_token(
+    # 1. Validate refresh token
+    token_data = validate_refresh_token(
         redis_client,
         old_refresh_token
     )
 
-    if not user_id:
+    if not token_data:
         logger.warning("Invalid or expired refresh token")
         raise InvalidCredentialsError("Invalid or expired refresh token")
+
+    user_id = token_data["user_id"]
+    session_id = token_data["session_id"]
+
+    # 2. Verify Redis session
+    session_data = get_session(session_id)
+
+    if not session_data or int(session_data["user_id"]) != int(user_id):
+        logger.warning("Refresh failed: session is invalid or expired")
+        raise InvalidCredentialsError("Invalid or expired session")
 
     # 2. Find the user in the database
     user = user_repository.get_by_id(db, int(user_id))
@@ -137,18 +151,19 @@ def refresh_user_tokens(db: Session, old_refresh_token: str):
     new_refresh_token = create_refresh_token()
 
     # 4. Atomically replace the old refresh token in Redis
-    rotated_user_id = rotate_refresh_token(
+    rotated_data = rotate_refresh_token(
         old_refresh_token,
         new_refresh_token
     )
 
-    if not rotated_user_id:
+    if not rotated_data:
         logger.warning("Refresh token already used or expired")
         raise InvalidCredentialsError("Invalid or expired refresh token")
 
-    # 5. Generate a new access token
+    # 6. Generate new access token with the same session ID
     access_token = create_access_token(
-        user_id=int(rotated_user_id)
+        user_id=int(rotated_data["user_id"]),
+        session_id=rotated_data["session_id"]
     )
 
     logger.info("Tokens refreshed successfully for user ID: %s", user.id)
@@ -160,19 +175,45 @@ def refresh_user_tokens(db: Session, old_refresh_token: str):
         "token_type": "bearer"
     }
 
+
 def logout_user(refresh_token: str):
+
     logger.info("Logout request received")
 
+    # 1. Validate refresh token and retrieve session information
+    token_data = validate_refresh_token(
+        redis_client,
+        refresh_token
+    )
+
+    if not token_data:
+        logger.warning("Logout failed: invalid or expired refresh token")
+        raise InvalidCredentialsError("Invalid or expired refresh token")
+
+    user_id = int(token_data["user_id"])
+    session_id = token_data["session_id"]
+
+    # 2. Revoke refresh token
     revoked = revoke_refresh_token(refresh_token)
 
     if not revoked:
-        logger.warning("Logout failed: invalid or already revoked refresh token")
+        logger.warning("Logout failed: refresh token already revoked")
         raise InvalidCredentialsError("Invalid or expired refresh token")
 
-    logger.info("User logged out successfully")
+    # 3. Revoke associated session
+    revoke_session(
+        session_id=session_id,
+        user_id=user_id
+    )
+
+    logger.info(
+        "User logged out successfully. User ID: %s",
+        user_id
+    )
 
     return {
         "message": "Logged out successfully"
     }
+
 
 

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-
+import json
 import jwt
 import secrets
 import hashlib
@@ -7,6 +7,7 @@ from app.config import settings
 
 def create_access_token(
     user_id: int,
+    session_id: str,
     expires_delta: timedelta | None = None
 ) -> str:
 
@@ -17,6 +18,7 @@ def create_access_token(
 
     payload = {
         "sub": str(user_id),
+        "sid": session_id,
         "exp": expire
     }
 
@@ -36,14 +38,14 @@ def hash_refresh_token(refresh_token: str) -> str:
         refresh_token.encode("utf-8")
     ).hexdigest()
 
-def validate_refresh_token(redis_client, refresh_token: str) -> str | None:
+def validate_refresh_token(redis_client, refresh_token: str) -> dict | None:
     hashed_token = hash_refresh_token(refresh_token)
 
-    user_id = redis_client.get(
+    token_data = redis_client.get(
         f"refresh_token:{hashed_token}"
     )
 
-    if not user_id:
+    if not token_data:
         return None
 
-    return user_id
+    return json.loads(token_data)

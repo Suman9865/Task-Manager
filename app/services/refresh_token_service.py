@@ -1,4 +1,6 @@
 
+import json
+
 from app.config import settings
 from app.core.redis import redis_client
 from app.core.token import hash_refresh_token
@@ -24,7 +26,7 @@ redis.call(
 return user_id
 """
 
-def store_refresh_token(user_id: int, refresh_token: str) -> None:
+def store_refresh_token(user_id: int, session_id: str,refresh_token: str) -> None:
 
     token_hash = hash_refresh_token(refresh_token)
 
@@ -32,10 +34,15 @@ def store_refresh_token(user_id: int, refresh_token: str) -> None:
 
     ttl = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
+    token_data = {
+        "user_id": user_id,
+        "session_id": session_id
+    }
+
     redis_client.setex(
         redis_key,
         ttl,
-        str(user_id)
+        json.dumps(token_data)
     )
 
 
@@ -60,7 +67,10 @@ def rotate_refresh_token(
         ttl
     )
 
-    return user_id
+    if not user_id:
+        return None
+
+    return json.loads(user_id)
 
 
 def revoke_refresh_token(refresh_token: str) -> bool:

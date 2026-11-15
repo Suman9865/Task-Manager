@@ -13,7 +13,7 @@ from app.exceptions.task_exceptions import (
     TaskTitleChangeError,
     TaskDeletionError,
 )
-from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError, RateLimitExceededError
+from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError, RateLimitExceededError, AuthenticationError
 from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
 from app.middleware.request_id import RequestIDMiddleware
@@ -187,6 +187,14 @@ async def rate_limit_exception_handler(
             "X-RateLimit-Limit": str(exc.limit),
             "X-RateLimit-Remaining": "0"
         }
+    )
+
+@app.exception_handler(AuthenticationError)
+async def authentication_exception_handler(request: Request, exc: AuthenticationError):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": exc.message},
+        headers={"WWW-Authenticate": "Bearer"}
     )
 
 
