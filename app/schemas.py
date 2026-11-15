@@ -131,3 +131,6 @@ class UserLogin(BaseModel):
 
 class LoginEmail(BaseModel):
     email: EmailStr
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str

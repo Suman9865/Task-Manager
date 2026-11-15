@@ -9,8 +9,9 @@ from app.repositories import user_repository
 from app.core.security import hash_password, verify_password
 from app.exceptions.user_exceptions import InvalidEmailFormatError, UserAlreadyExistsError, InvalidCredentialsError
 from app.models.user import User
-from app.core.token import create_access_token
+from app.core.token import create_access_token, create_refresh_token
 from pydantic import ValidationError
+from app.services.refresh_token_service import store_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +95,18 @@ def login_user(db: Session, email: str, password: str):
     # 5. Generate JWT access token
     access_token = create_access_token(user_id=user.id)
 
+    # Generate refresh token
+    refresh_token = create_refresh_token()
+
+    # Store refresh token in Redis
+    store_refresh_token(user_id=user.id, refresh_token=refresh_token)
+
     logger.info("User login successful. User ID: %s", user.id)
 
     # 6. Return token
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer"
     }
 
