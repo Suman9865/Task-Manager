@@ -13,7 +13,7 @@ from app.exceptions.task_exceptions import (
     TaskTitleChangeError,
     TaskDeletionError,
 )
-from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError
+from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError, RateLimitExceededError
 from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
 from app.middleware.request_id import RequestIDMiddleware
@@ -172,6 +172,22 @@ async def invalid_email_format_handler(
         content={"detail": str(exc)}
     )
 
+@app.exception_handler(RateLimitExceededError)
+async def rate_limit_exception_handler(
+    request: Request,
+    exc: RateLimitExceededError
+):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": exc.message
+        },
+        headers={
+            "Retry-After": str(exc.retry_after),
+            "X-RateLimit-Limit": str(exc.limit),
+            "X-RateLimit-Remaining": "0"
+        }
+    )
 
 
 # ----------------------------------------

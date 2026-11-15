@@ -18,6 +18,7 @@ from app.services.task_service import (
 
 from app.models.user import User
 from app.core.dependencies import get_current_user
+from app.core.rate_limit_dependencies import rate_limit_dependency
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ def get_tasks(
     limit: int = Query(default=10, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
+    rate_info: dict = Depends(rate_limit_dependency),
     db: Session = Depends(get_db)
 ):
 

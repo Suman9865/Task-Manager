@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     REDIS_URL: str = "redis://localhost:6379/0"
+    RATE_LIMIT_MAX_REQUESTS: int = 5
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",
