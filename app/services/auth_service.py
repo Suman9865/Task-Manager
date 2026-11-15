@@ -12,7 +12,7 @@ from app.models.user import User
 from app.core.token import create_access_token, create_refresh_token, validate_refresh_token
 from pydantic import ValidationError
 from app.core.redis import redis_client
-from app.services.refresh_token_service import store_refresh_token, rotate_refresh_token
+from app.services.refresh_token_service import store_refresh_token, rotate_refresh_token, revoke_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,21 @@ def refresh_user_tokens(db: Session, old_refresh_token: str):
         "access_token": access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer"
+    }
+
+def logout_user(refresh_token: str):
+    logger.info("Logout request received")
+
+    revoked = revoke_refresh_token(refresh_token)
+
+    if not revoked:
+        logger.warning("Logout failed: invalid or already revoked refresh token")
+        raise InvalidCredentialsError("Invalid or expired refresh token")
+
+    logger.info("User logged out successfully")
+
+    return {
+        "message": "Logged out successfully"
     }
 
 

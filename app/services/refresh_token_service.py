@@ -62,3 +62,15 @@ def rotate_refresh_token(
 
     return user_id
 
+
+def revoke_refresh_token(refresh_token: str) -> bool:
+
+    token_hash = hash_refresh_token(refresh_token)
+
+    redis_key = f"refresh_token:{token_hash}"
+
+    deleted = redis_client.delete(redis_key)
+
+    return deleted > 0
+
+

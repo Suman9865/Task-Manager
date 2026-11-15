@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.database import get_db
 from app.schemas import UserCreate, UserResponse, UserLogin, LoginEmail, RefreshTokenRequest
-from app.services.auth_service import (register_user, login_user, refresh_user_tokens)
+from app.services.auth_service import (register_user, login_user, refresh_user_tokens, logout_user)
 
 logger = logging.getLogger(__name__)
 
@@ -37,3 +37,9 @@ def refresh(
         db,
         token_data.refresh_token
     )
+
+@router.post("/logout")
+def logout(token_data: RefreshTokenRequest):
+    logger.info("POST /auth/logout - Request received")
+
+    return logout_user(token_data.refresh_token)
