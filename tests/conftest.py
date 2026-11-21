@@ -7,6 +7,7 @@ from app import main as main_module
 from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.rate_limit_dependencies import rate_limit_dependency
+from app.core.redis import get_redis
 from app.database import Base, get_db
 from app.main import app
 from app.models import Task, User  # noqa: F401
@@ -22,6 +23,8 @@ TestingSessionLocal = async_sessionmaker(
 
 @pytest_asyncio.fixture
 async def db():
+    redis_client = get_redis()
+    await redis_client.flushdb()
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
@@ -29,12 +32,18 @@ async def db():
         yield session
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
+    await redis_client.flushdb()
 
 
 @pytest_asyncio.fixture
 async def client(db, monkeypatch):
     monkeypatch.setattr(main_module, "engine", test_engine)
     monkeypatch.setattr(settings, "AUTO_CREATE_SCHEMA", True)
+
+    async def keep_test_redis_open():
+        return None
+
+    monkeypatch.setattr(main_module, "close_redis", keep_test_redis_open)
 
     async def override_get_db():
         yield db

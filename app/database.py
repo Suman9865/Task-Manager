@@ -1,7 +1,11 @@
 import logging
 from collections.abc import AsyncGenerator
 
-from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SQLAlchemyTimeoutError
+from sqlalchemy.exc import (
+    DBAPIError,
+    OperationalError,
+    TimeoutError as SQLAlchemyTimeoutError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -11,7 +15,8 @@ from app.exceptions.user_exceptions import ServiceUnavailableError
 logger = logging.getLogger(__name__)
 
 
-def _normalize_database_url(url: str) -> str:
+def normalize_database_url(url: str) -> str:
+    """Convert supported synchronous URLs to their async SQLAlchemy drivers."""
     if url.startswith("sqlite:///"):
         return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
     if url.startswith("postgresql://"):
@@ -19,8 +24,10 @@ def _normalize_database_url(url: str) -> str:
     return url
 
 
-DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite+") else {}
+DATABASE_URL = normalize_database_url(settings.DATABASE_URL)
+connect_args = (
+    {"check_same_thread": False} if DATABASE_URL.startswith("sqlite+") else {}
+)
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -48,12 +55,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except (OperationalError, SQLAlchemyTimeoutError) as exc:
             await db.rollback()
             logger.exception("Database is unavailable")
-            raise ServiceUnavailableError("Database temporarily unavailable") from exc
+            raise ServiceUnavailableError(
+                "Database temporarily unavailable"
+            ) from exc
         except DBAPIError as exc:
             await db.rollback()
             if exc.connection_invalidated:
                 logger.exception("Database connection was lost")
-                raise ServiceUnavailableError("Database temporarily unavailable") from exc
+                raise ServiceUnavailableError(
+                    "Database temporarily unavailable"
+                ) from exc
             raise
         except Exception:
             await db.rollback()
