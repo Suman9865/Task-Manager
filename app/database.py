@@ -1,65 +1,54 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+import logging
+from collections.abc import AsyncGenerator
+
+from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SQLAlchemyTimeoutError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base
 
 from app.core.config import settings
-
-import logging
-
-from sqlalchemy.exc import (
-    OperationalError,
-    DBAPIError,
-    TimeoutError as SQLAlchemyTimeoutError
-)
-
 from app.exceptions.user_exceptions import ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
 
-# Database URL
-SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
+DATABASE_URL = settings.DATABASE_URL
+if DATABASE_URL.startswith("sqlite:///"):
+    DATABASE_URL = DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create database engine
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False}
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite+") else {}
+
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=settings.DEBUG,
+    pool_pre_ping=True,
+    connect_args=connect_args,
 )
 
-# Create database session
-SessionLocal = sessionmaker(
-    autocommit=False,
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
     autoflush=False,
-    bind=engine
 )
 
-# Base class for database models
 Base = declarative_base()
 
-def get_db():
-    db = SessionLocal()
 
-    try:
-        yield db
-
-    except (OperationalError, SQLAlchemyTimeoutError) as exc:
-        db.rollback()
-
-        logger.exception("Database is unavailable")
-
-        raise ServiceUnavailableError(
-            "Database temporarily unavailable"
-        ) from exc
-
-    except DBAPIError as exc:
-        db.rollback()
-
-        if exc.connection_invalidated:
-            logger.exception("Database connection was lost")
-
-            raise ServiceUnavailableError(
-                "Database temporarily unavailable"
-            ) from exc
-
-        raise
-
-    finally:
-        db.close()
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+        except (OperationalError, SQLAlchemyTimeoutError) as exc:
+            await db.rollback()
+            logger.exception("Database is unavailable")
+            raise ServiceUnavailableError("Database temporarily unavailable") from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if exc.connection_invalidated:
+                logger.exception("Database connection was lost")
+                raise ServiceUnavailableError("Database temporarily unavailable") from exc
+            raise
+        except Exception:
+            await db.rollback()
+            raise

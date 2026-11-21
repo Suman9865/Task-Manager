@@ -1,10 +1,14 @@
-from fastapi.testclient import TestClient
-from app.main import app
-
-#client = TestClient(app)
+import pytest
 
 
-def test_get_tasks(client):
-    response = client.get("/tasks")
-
+@pytest.mark.asyncio
+async def test_health_endpoint(client):
+    response = await client.get("/health")
     assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
+
+
+@pytest.mark.asyncio
+async def test_tasks_requires_authentication(client):
+    response = await client.get("/tasks")
+    assert response.status_code == 401

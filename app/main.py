@@ -1,233 +1,150 @@
-
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.http_client import set_http_client
+from app.core.redis import close_redis
 from app.database import engine, Base
 from app.exceptions.task_exceptions import (
-    TaskAlreadyExistsError,
-    TaskNotFoundError,
-    TaskTitleChangeError,
-    TaskDeletionError,
+    TaskAlreadyExistsError, TaskNotFoundError, TaskTitleChangeError, TaskDeletionError,
 )
-from app.exceptions.user_exceptions import InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError, RateLimitExceededError, AuthenticationError, ServiceUnavailableError
+from app.exceptions.user_exceptions import (
+    InvalidCredentialsError, UserAlreadyExistsError, InvalidEmailFormatError,
+    RateLimitExceededError, AuthenticationError, ServiceUnavailableError,
+)
 from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
 from app.middleware.request_id import RequestIDMiddleware
 from app.routes.auth import router as auth_routes
 from app.routes.weather import router as weather_routes
 
-# Initialize logging
-setup_logging()
+# Register all mapped classes before creating the metadata tables.
+from app.models.task import Task  # noqa: F401
+from app.models.user import User  # noqa: F401
 
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
-# ----------------------------------------
-# Lifespan Management
-# ----------------------------------------
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    # Startup
     logger.info("Starting Task Manager API application")
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
 
-    Base.metadata.create_all(bind=engine)
-
-    logger.info("Database tables initialized successfully")
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down Task Manager API application")
-
-    engine.dispose()
-
-    logger.info("Database connections closed successfully")
-
-
-# ----------------------------------------
-# Initialize FastAPI Application
-# ----------------------------------------
-
-app = FastAPI(
-    title=settings.APP_NAME,
-    debug=settings.DEBUG,
-    lifespan=lifespan
-)
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0),
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        ) as client:
+            set_http_client(client)
+            try:
+                yield
+            finally:
+                set_http_client(None)
+    finally:
+        set_http_client(None)
+        await close_redis()
+        await engine.dispose()
+        logger.info("Application resources closed")
 
 
-# Register middleware
+app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG, lifespan=lifespan)
 app.add_middleware(RequestIDMiddleware)
-
-
-# Register task routes
 app.include_router(task_router)
-
-# Register authentication routes
 app.include_router(auth_routes)
-
-
-# Register weather routes
 app.include_router(weather_routes)
 
-# ----------------------------------------
-# Global Exception Handlers
-# ----------------------------------------
 
 @app.exception_handler(TaskAlreadyExistsError)
-async def task_already_exists_handler(
-    request: Request,
-    exc: TaskAlreadyExistsError
-):
+async def task_already_exists_handler(request: Request, exc: TaskAlreadyExistsError):
     logger.warning("Duplicate task creation attempted: %s", exc)
-
-    return JSONResponse(
-        status_code=409,
-        content={"detail": str(exc)}
-    )
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.exception_handler(TaskNotFoundError)
-async def task_not_found_handler(
-    request: Request,
-    exc: TaskNotFoundError
-):
+async def task_not_found_handler(request: Request, exc: TaskNotFoundError):
     logger.warning("Task not found: %s", exc)
-
-    return JSONResponse(
-        status_code=404,
-        content={"detail": str(exc)}
-    )
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 @app.exception_handler(TaskTitleChangeError)
-async def task_title_change_handler(
-    request: Request,
-    exc: TaskTitleChangeError
-):
+async def task_title_change_handler(request: Request, exc: TaskTitleChangeError):
     logger.warning("Task title change failed: %s", exc)
-
-    return JSONResponse(
-        status_code=400,
-        content={"detail": str(exc)}
-    )
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 @app.exception_handler(TaskDeletionError)
-async def task_deletion_handler(
-    request: Request,
-    exc: TaskDeletionError
-):
+async def task_deletion_handler(request: Request, exc: TaskDeletionError):
     logger.exception("Task deletion failed: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc)}
-    )
-
-
-# Handle unexpected exceptions
-@app.exception_handler(Exception)
-async def general_exception_handler(
-    request: Request,
-    exc: Exception
-):
-    logger.exception("Unexpected application error: %s", exc)
-
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
-    )
 
 @app.exception_handler(InvalidCredentialsError)
 async def invalid_credentials_handler(request: Request, exc: InvalidCredentialsError):
-    logger.warning("Invalid login attempt: %s", exc)
-    return JSONResponse(
-        status_code=401,
-        content={"detail": str(exc)}
-    )
+    logger.warning("Invalid credentials: %s", exc)
+    return JSONResponse(status_code=401, content={"detail": str(exc)})
 
 
 @app.exception_handler(UserAlreadyExistsError)
-async def user_already_exists_handler(
-    request: Request,
-    exc: UserAlreadyExistsError
-):
+async def user_already_exists_handler(request: Request, exc: UserAlreadyExistsError):
     logger.warning("Duplicate user registration attempted: %s", exc)
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
-    return JSONResponse(
-        status_code=409,
-        content={"detail": str(exc)}
-    )
 
 @app.exception_handler(InvalidEmailFormatError)
-async def invalid_email_format_handler(
-    request: Request,
-    exc: InvalidEmailFormatError
-):
+async def invalid_email_format_handler(request: Request, exc: InvalidEmailFormatError):
     logger.warning("Invalid email format: %s", exc)
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
-    return JSONResponse(
-        status_code=422,
-        content={"detail": str(exc)}
-    )
 
 @app.exception_handler(RateLimitExceededError)
-async def rate_limit_exception_handler(
-    request: Request,
-    exc: RateLimitExceededError
-):
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceededError):
     return JSONResponse(
         status_code=429,
-        content={
-            "detail": exc.message
-        },
+        content={"detail": exc.message},
         headers={
             "Retry-After": str(exc.retry_after),
             "X-RateLimit-Limit": str(exc.limit),
-            "X-RateLimit-Remaining": "0"
-        }
+            "X-RateLimit-Remaining": "0",
+        },
     )
+
 
 @app.exception_handler(AuthenticationError)
 async def authentication_exception_handler(request: Request, exc: AuthenticationError):
     return JSONResponse(
         status_code=401,
         content={"detail": exc.message},
-        headers={"WWW-Authenticate": "Bearer"}
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
 @app.exception_handler(ServiceUnavailableError)
-async def service_unavailable_handler(
-    request: Request,
-    exc: ServiceUnavailableError
-):
+async def service_unavailable_handler(request: Request, exc: ServiceUnavailableError):
     logger.error("Service unavailable: %s", exc.message)
-
     return JSONResponse(
         status_code=503,
         content={"detail": exc.message},
-        headers={
-            "Retry-After": str(exc.retry_after)
-        }
+        headers={"Retry-After": str(exc.retry_after)},
     )
 
 
-# ----------------------------------------
-# Application Endpoints
-# ----------------------------------------
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unexpected application error: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 
 @app.get("/")
-def home():
+async def home():
     return {"message": "Welcome to Task Manager API"}
 
 
 @app.get("/health")
-def health():
+async def health():
     return {"status": "healthy"}

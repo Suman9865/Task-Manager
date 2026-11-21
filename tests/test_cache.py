@@ -1,24 +1,21 @@
-from app.core.cache import (
-    get_cache,
-    set_cache,
-    delete_cache
-)
+import json
+from unittest.mock import AsyncMock
 
-key = "test:cache"
+import pytest
 
-data = {
-    "id": 1,
-    "title": "Learn Redis"
-}
+from app.core import cache
 
-# Store
-print(set_cache(key, data, ttl=60))
 
-# Retrieve
-print(get_cache(key))
+@pytest.mark.asyncio
+async def test_cache_round_trip(monkeypatch):
+    redis_mock = AsyncMock()
+    redis_mock.get.return_value = json.dumps({"id": 1, "title": "Learn Redis"})
+    monkeypatch.setattr(cache, "redis_client", redis_mock)
 
-# Delete
-print(delete_cache(key))
+    value = await cache.get_cache("test:cache")
+    assert value == {"id": 1, "title": "Learn Redis"}
 
-# Retrieve again
-print(get_cache(key))
+    assert await cache.set_cache("test:cache", value, ttl=60) is True
+    redis_mock.setex.assert_awaited_once()
+    assert await cache.delete_cache("test:cache") is True
+    redis_mock.delete.assert_awaited_once()

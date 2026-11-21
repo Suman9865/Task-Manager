@@ -1,9 +1,11 @@
-import redis
+import pytest
+from unittest.mock import AsyncMock
 
-r = redis.Redis(
-    host="localhost",
-    port=6379,
-    decode_responses=True
-)
+from app.core.redis import close_redis, get_redis
 
-print(r.ping())
+
+@pytest.mark.asyncio
+async def test_redis_client_is_async():
+    client = get_redis()
+    assert hasattr(client, "get")
+    assert hasattr(client, "aclose")

@@ -1,54 +1,47 @@
-
-import pytest
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
+import pytest_asyncio
+from asgi_lifespan import LifespanManager
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.main import app
+from app import main as main_module
 from app.database import Base, get_db
-from app import models
+from app.models.task import Task  # noqa: F401
+from app.models.user import User  # noqa: F401
 
-
-# Separate test database
-TEST_DATABASE_URL = "sqlite:///./test_tasks.db"
-
-test_engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False}
+TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_tasks_async.db"
+test_engine = create_async_engine(
+    TEST_DATABASE_URL, connect_args={"check_same_thread": False}
 )
-
-TestingSessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=test_engine
+TestingSessionLocal = async_sessionmaker(
+    bind=test_engine, expire_on_commit=False, autoflush=False
 )
 
 
-# Database fixture
-@pytest.fixture
-def db():
-    Base.metadata.create_all(bind=test_engine)
-
-    database = TestingSessionLocal()
-
-    try:
-        yield database
-    finally:
-        database.close()
-        Base.metadata.drop_all(bind=test_engine)
+@pytest_asyncio.fixture
+async def db():
+    async with test_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with TestingSessionLocal() as session:
+        yield session
+    async with test_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
 
 
-# TestClient fixture
-@pytest.fixture
-def client(db):
+@pytest_asyncio.fixture
+async def client(db, monkeypatch):
+    # Keep the application's lifespan schema setup on the isolated test database.
+    monkeypatch.setattr(main_module, "engine", test_engine)
 
-    def override_get_db():
+    async def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
+    try:
+        async with LifespanManager(app):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as test_client:
+                yield test_client
+    finally:
+        app.dependency_overrides.clear()

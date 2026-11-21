@@ -192,3 +192,34 @@ This project focuses on building a strong foundation in backend development:
 ## Project Status
 
 Currently under development.
+
+
+## Asynchronous runtime
+
+The `async_main` branch uses async SQLAlchemy sessions, `redis.asyncio`, and a shared `httpx.AsyncClient` managed by the FastAPI lifespan. Routes, services, repositories, authentication/session operations, rate limiting, and external API integrations use `async def` and await their I/O operations.
+
+### Async database URL
+
+For SQLite, use:
+
+```env
+DATABASE_URL=sqlite+aiosqlite:///./tasks.db
+```
+
+For PostgreSQL, use an async driver URL such as:
+
+```env
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/task_manager
+```
+
+The application also converts the previous `sqlite:///...` and `postgresql://...` URL forms to their async driver equivalents. Existing SQLite tables are initialized with SQLAlchemy metadata; this does not delete the database file. Back up your database before running schema changes.
+
+Install dependencies and run:
+
+```bash
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+pytest -v
+```
+
+Redis must be running and `SECRET_KEY` and `WEATHER_API_KEY` must be configured in `.env`. The async HTTP client is shared for connection pooling and closed during application shutdown.

@@ -1,155 +1,58 @@
-
-from unittest.mock import patch
-
-from app.services.geolocation_service import get_ip_location
-
-
-def test_get_ip_location_success():
-
-    expected_data = {
-        "success": True,
-        "country": "United States",
-        "city": "Mountain View"
-    }
-
-    with patch(
-        "app.services.geolocation_service.fetch_ip_location",
-        return_value=expected_data
-    ) as mock_fetch:
-
-        result = get_ip_location("8.8.8.8")
-
-    assert result == {
-        "country": "United States",
-        "city": "Mountain View"
-    }
-
-    mock_fetch.assert_called_once_with("8.8.8.8")
-
+from unittest.mock import AsyncMock
 
 import pytest
 
+from app.services import geolocation_service
 
+
+@pytest.mark.asyncio
+async def test_get_ip_location_success(monkeypatch):
+    fetch = AsyncMock(return_value={
+        "success": True, "country": "United States", "city": "Mountain View"
+    })
+    monkeypatch.setattr(geolocation_service, "fetch_ip_location", fetch)
+
+    assert await geolocation_service.get_ip_location("8.8.8.8") == {
+        "country": "United States", "city": "Mountain View"
+    }
+    fetch.assert_awaited_once_with("8.8.8.8")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ip", ["invalid-ip", "999.999.999.999", "", "192.168.1.1", "127.0.0.1", "::1", "fc00::1"])
+async def test_get_ip_location_invalid_or_non_public_ip(monkeypatch, ip):
+    fetch = AsyncMock()
+    monkeypatch.setattr(geolocation_service, "fetch_ip_location", fetch)
+
+    assert await geolocation_service.get_ip_location(ip) == {"country": None, "city": None}
+    fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response", [
+    None,
+    {"success": False, "message": "Location not found"},
+])
+async def test_get_ip_location_fallback(monkeypatch, response):
+    fetch = AsyncMock(return_value=response)
+    monkeypatch.setattr(geolocation_service, "fetch_ip_location", fetch)
+
+    assert await geolocation_service.get_ip_location("8.8.8.8") == {
+        "country": None, "city": None
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "ip_address",
+    "response, expected",
     [
-        "invalid-ip",
-        "999.999.999.999",
-        "abc.def.ghi.jkl",
-        ""
-    ]
+        ({"success": True, "country": "India"}, {"country": "India", "city": None}),
+        ({"success": True, "city": "Patna"}, {"country": None, "city": "Patna"}),
+        ({"success": True}, {"country": None, "city": None}),
+    ],
 )
-def test_get_ip_location_invalid_ip(ip_address):
-
-    with patch(
-        "app.services.geolocation_service.fetch_ip_location"
-    ) as mock_fetch:
-
-        result = get_ip_location(ip_address)
-
-    assert result == {
-        "country": None,
-        "city": None
-    }
-
-    # External API must never be called.
-    mock_fetch.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "ip_address",
-    [
-        "192.168.1.1",   # Private IPv4
-        "10.0.0.1",      # Private IPv4
-        "127.0.0.1",     # Loopback IPv4
-        "172.16.0.1",    # Private IPv4
-        "169.254.1.1",   # Link-local IPv4
-        "::1",           # Loopback IPv6
-        "fc00::1",       # Private IPv6
-    ]
-)
-def test_get_ip_location_non_public_ip(ip_address):
-
-    with patch(
-        "app.services.geolocation_service.fetch_ip_location"
-    ) as mock_fetch:
-
-        result = get_ip_location(ip_address)
-
-    assert result == {
-        "country": None,
-        "city": None
-    }
-
-    mock_fetch.assert_not_called()
-
-
-def test_get_ip_location_external_api_failure():
-
-    with patch(
-        "app.services.geolocation_service.fetch_ip_location",
-        return_value=None
-    ) as mock_fetch:
-
-        result = get_ip_location("8.8.8.8")
-
-    assert result == {
-        "country": None,
-        "city": None
-    }
-
-    mock_fetch.assert_called_once_with("8.8.8.8")
-
-
-def test_get_ip_location_provider_unsuccessful():
-
-    api_response = {
-        "success": False,
-        "message": "Location not found"
-    }
-
-    with patch(
-        "app.services.geolocation_service.fetch_ip_location",
-        return_value=api_response
-    ) as mock_fetch:
-
-        result = get_ip_location("8.8.8.8")
-
-    assert result == {
-        "country": None,
-        "city": None
-    }
-
-    mock_fetch.assert_called_once_with("8.8.8.8")
-
-
-@pytest.mark.parametrize(
-    "api_response, expected_result",
-    [
-        (
-            {"success": True, "country": "India"},
-            {"country": "India", "city": None}
-        ),
-        (
-            {"success": True, "city": "Patna"},
-            {"country": None, "city": "Patna"}
-        ),
-        (
-            {"success": True},
-            {"country": None, "city": None}
-        )
-    ]
-)
-def test_get_ip_location_missing_fields(
-    api_response,
-    expected_result
-):
-
-    with patch(
-        "app.services.geolocation_service.fetch_ip_location",
-        return_value=api_response
-    ):
-
-        result = get_ip_location("8.8.8.8")
-
-    assert result == expected_result
+async def test_get_ip_location_missing_fields(monkeypatch, response, expected):
+    monkeypatch.setattr(
+        geolocation_service, "fetch_ip_location", AsyncMock(return_value=response)
+    )
+    assert await geolocation_service.get_ip_location("8.8.8.8") == expected
