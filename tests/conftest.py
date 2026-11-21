@@ -4,12 +4,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import main as main_module
+from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.rate_limit_dependencies import rate_limit_dependency
 from app.database import Base, get_db
 from app.main import app
-from app.models.task import Task  # noqa: F401
-from app.models.user import User  # noqa: F401
+from app.models import Task, User  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_tasks_async.db"
 test_engine = create_async_engine(
@@ -23,6 +23,7 @@ TestingSessionLocal = async_sessionmaker(
 @pytest_asyncio.fixture
 async def db():
     async with test_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     async with TestingSessionLocal() as session:
         yield session
@@ -33,6 +34,7 @@ async def db():
 @pytest_asyncio.fixture
 async def client(db, monkeypatch):
     monkeypatch.setattr(main_module, "engine", test_engine)
+    monkeypatch.setattr(settings, "AUTO_CREATE_SCHEMA", True)
 
     async def override_get_db():
         yield db

@@ -4,10 +4,13 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.core.http_client import set_http_client
-from app.core.redis import close_redis
+from app.core.redis import close_redis, get_redis
 from app.database import engine, Base
 from app.exceptions.task_exceptions import (
     TaskAlreadyExistsError, TaskNotFoundError, TaskTitleChangeError, TaskDeletionError,
@@ -22,9 +25,7 @@ from app.middleware.request_id import RequestIDMiddleware
 from app.routes.auth import router as auth_routes
 from app.routes.weather import router as weather_routes
 
-# Register all mapped classes before creating the metadata tables.
-from app.models.task import Task  # noqa: F401
-from app.models.user import User  # noqa: F401
+from app.models import Task, User  # noqa: F401
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -34,8 +35,12 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting Task Manager API application")
     try:
-        async with engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
+        if settings.AUTO_CREATE_SCHEMA:
+            logger.warning(
+                "AUTO_CREATE_SCHEMA is enabled; use Alembic migrations in production"
+            )
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
 
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0),
@@ -81,24 +86,24 @@ async def task_title_change_handler(request: Request, exc: TaskTitleChangeError)
 @app.exception_handler(TaskDeletionError)
 async def task_deletion_handler(request: Request, exc: TaskDeletionError):
     logger.exception("Task deletion failed: %s", exc)
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    return JSONResponse(status_code=500, content={"detail": "Unable to delete task"})
 
 
 @app.exception_handler(InvalidCredentialsError)
 async def invalid_credentials_handler(request: Request, exc: InvalidCredentialsError):
-    logger.warning("Invalid credentials: %s", exc)
+    logger.warning("Invalid credentials")
     return JSONResponse(status_code=401, content={"detail": str(exc)})
 
 
 @app.exception_handler(UserAlreadyExistsError)
 async def user_already_exists_handler(request: Request, exc: UserAlreadyExistsError):
-    logger.warning("Duplicate user registration attempted: %s", exc)
+    logger.warning("Duplicate user registration attempted")
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.exception_handler(InvalidEmailFormatError)
 async def invalid_email_format_handler(request: Request, exc: InvalidEmailFormatError):
-    logger.warning("Invalid email format: %s", exc)
+    logger.warning("Invalid email format")
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
@@ -136,7 +141,7 @@ async def service_unavailable_handler(request: Request, exc: ServiceUnavailableE
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unexpected application error: %s", exc)
+    logger.exception("Unexpected application error")
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
@@ -145,6 +150,20 @@ async def home():
     return {"message": "Welcome to Task Manager API"}
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health():
+    """Liveness probe: confirms the ASGI process is responsive."""
     return {"status": "healthy"}
+
+
+@app.get("/ready", tags=["Health"])
+async def readiness():
+    """Readiness probe: checks the database and Redis dependencies."""
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        await get_redis().ping()
+    except (SQLAlchemyError, RedisError) as exc:
+        logger.warning("Readiness check failed: %s", type(exc).__name__)
+        raise ServiceUnavailableError("Application dependencies are unavailable") from exc
+    return {"status": "ready"}

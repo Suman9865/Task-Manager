@@ -38,3 +38,4 @@ aiosqlite
 asyncpg
 pytest-asyncio
 asgi-lifespan
+alembic>=1.14,<2

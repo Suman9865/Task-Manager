@@ -3,19 +3,23 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 from app.exceptions.user_exceptions import ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = settings.DATABASE_URL
-if DATABASE_URL.startswith("sqlite:///"):
-    DATABASE_URL = DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
-elif DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+def _normalize_database_url(url: str) -> str:
+    if url.startswith("sqlite:///"):
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+DATABASE_URL = _normalize_database_url(settings.DATABASE_URL)
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite+") else {}
 
 engine = create_async_engine(
@@ -32,7 +36,9 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

@@ -1,9 +1,11 @@
 import math
 import time
 
+from redis.exceptions import RedisError
+
 from app.core.config import settings
 from app.core.redis import get_redis
-from app.exceptions.user_exceptions import RateLimitExceededError
+from app.exceptions.user_exceptions import RateLimitExceededError, ServiceUnavailableError
 
 RATE_LIMIT_SCRIPT = """
 local current_count = redis.call('INCR', KEYS[1])
@@ -42,8 +44,13 @@ def _fixed_window_key(prefix: str, identity: str | int) -> tuple[str, int]:
 
 
 async def _increment(key: str, window_end: int) -> int:
-    count = await get_redis().eval(RATE_LIMIT_SCRIPT, 1, key, window_end * 1000)
-    return int(count)
+    try:
+        count = await get_redis().eval(RATE_LIMIT_SCRIPT, 1, key, window_end * 1000)
+        return int(count)
+    except RedisError as exc:
+        raise ServiceUnavailableError(
+            "Rate limiting service temporarily unavailable"
+        ) from exc
 
 
 def _result_or_raise(count: int, window_end: int, message: str) -> dict[str, int]:
@@ -93,11 +100,17 @@ def generate_sliding_window_keys(user_id: int) -> tuple[str, str, int, int, int]
 async def check_sliding_window_rate_limit(user_id: int) -> dict[str, int]:
     current_key, previous_key, start, end, now_ms = generate_sliding_window_keys(user_id)
     window_ms = settings.RATE_LIMIT_WINDOW_SECONDS * 1000
-    result = await get_redis().eval(
-        SLIDING_WINDOW_SCRIPT, 2, current_key, previous_key,
-        now_ms, start * 1000, end * 1000, window_ms,
-        settings.RATE_LIMIT_MAX_REQUESTS,
-    )
+    try:
+        result = await get_redis().eval(
+            SLIDING_WINDOW_SCRIPT, 2, current_key, previous_key,
+            now_ms, start * 1000, end * 1000, window_ms,
+            settings.RATE_LIMIT_MAX_REQUESTS,
+        )
+    except RedisError as exc:
+        raise ServiceUnavailableError(
+            "Rate limiting service temporarily unavailable"
+        ) from exc
+
     allowed, estimated_count = bool(int(result[0])), float(result[1])
     if not allowed:
         raise RateLimitExceededError(

@@ -1,225 +1,37 @@
 # Task Manager API
 
-A RESTful Task Manager API built with **FastAPI, SQLAlchemy, and SQLite**, demonstrating REST fundamentals, clean architecture, dependency injection, validation, centralized exception handling, and automated testing.
+Asynchronous REST API built with FastAPI, SQLAlchemy async sessions, Pydantic, Redis, and HTTPX.
 
-## Tech Stack
+## Architecture
 
-- **Backend:** FastAPI
-- **Database:** SQLite
-- **ORM:** SQLAlchemy
-- **Validation:** Pydantic
-- **Configuration:** Pydantic Settings
-- **Testing:** Pytest, FastAPI TestClient
-- **Language:** Python
+- `app/routes`: HTTP endpoints and dependency wiring.
+- `app/services`: business workflows.
+- `app/repositories`: async database queries.
+- `app/models`: SQLAlchemy ORM entities.
+- `app/core`: configuration, security, Redis, cache, rate limiting, HTTP client.
+- `app/external_apis`: external HTTP integrations.
+- `app/schemas.py`: Pydantic request and response schemas.
+- `tests`: async unit and API tests.
 
 ## Features
 
-### Core Features
-- Create, read, update, and delete tasks (CRUD).
-- Filter tasks by status.
-- Pagination using `limit` and `offset`.
-- Input validation for task titles and due dates.
-- Proper HTTP status codes and API responses.
-- Centralized exception handling.
-- Basic application logging.
-- Automated API testing with pytest.
+Async CRUD, per-user task ownership, JWT access and refresh tokens, Redis sessions/caching/rate limiting, geolocation and weather integrations, request IDs, centralized exception handling, health and readiness endpoints.
 
-### Advanced Features
-- **Layered Architecture:** Separate routes, services, repositories, database models, and schemas.
-- **Domain Exceptions:** Custom exceptions such as `TaskNotFound` and `InvalidDueDate`.
-- **Global Exception Handling:** Centralized error responses with request IDs.
-- **Dependency Injection:** Manage database sessions and services using FastAPI `Depends`.
-- **Application Settings:** Environment-based configuration using Pydantic Settings.
-- **Request ID Middleware:** Track requests across application logs using `ContextVar`.
-- **Health Check:** Dedicated `/health` endpoint.
-- **Unit Testing:** Test business logic using a fake repository without requiring a database.
-- **Integration Testing:** Test API endpoints using `TestClient` and dependency overrides.
+## Local setup
 
-## Project Architecture
+Python 3.13 and Redis are required. SQLite can be used locally; PostgreSQL is recommended for deployment.
 
-```text
-task-manager-api/
-│
-├── app/
-│   ├── routes/
-│   │   └── task_routes.py
-│   ├── services/
-│   │   └── task_service.py
-│   ├── repositories/
-│   │   └── task_repository.py
-│   ├── models/
-│   │   └── task.py
-│   ├── db_models/
-│   │   └── task.py
-│   ├── exceptions/
-│   │   └── domain_exceptions.py
-│   ├── middleware/
-│   │   └── request_id.py
-│   ├── config/
-│   │   └── settings.py
-│   ├── database.py
-│   └── main.py
-│
-├── tests/
-│   ├── unit/
-│   └── integration/
-│
-├── .env.example
-├── .gitignore
-├── requirements.txt
-└── README.md
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+Copy-Item .env.example .env
 ```
 
-## API Endpoints
+Set a unique `SECRET_KEY` of at least 32 characters and configure `WEATHER_API_KEY`, `DATABASE_URL`, and `REDIS_URL`.
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/tasks` | Create a task |
-| GET | `/tasks` | Get all tasks |
-| GET | `/tasks/{id}` | Get a task by ID |
-| PUT | `/tasks/{id}` | Update a task |
-| DELETE | `/tasks/{id}` | Delete a task |
-| GET | `/health` | Check application health |
+Run with `uvicorn app.main:app --reload`. API docs: `/docs`. Liveness: `/health`. Dependency readiness: `/ready`.
 
-### Filtering and Pagination
+Run tests with `pytest -v --cov=app --cov-report=term-missing`.
 
-```http
-GET /tasks?status=done&limit=10&offset=0
-```
-
-## HTTP Status Codes
-
-| Status Code | Description |
-|---|---|
-| 200 | Successful request |
-| 201 | Resource created |
-| 204 | Resource deleted |
-| 404 | Resource not found |
-| 422 | Validation error |
-| 500 | Internal server error |
-
-## Setup and Installation
-
-**1. Clone the repository**
-
-```bash
-git clone <repository-url>
-cd task-manager-api
-```
-
-**2. Create a virtual environment**
-
-```bash
-python -m venv venv
-```
-
-Activate it:
-
-```bash
-# Windows
-venv\Scripts\activate
-
-# Linux / macOS
-source venv/bin/activate
-```
-
-**3. Install dependencies**
-
-```bash
-pip install -r requirements.txt
-```
-
-**4. Configure environment variables**
-
-Create a `.env` file using `.env.example` as a reference.
-
-**5. Run the application**
-
-```bash
-uvicorn app.main:app --reload
-```
-
-## API Documentation
-
-Once the application is running, access:
-
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
-- Health Check: `http://127.0.0.1:8000/health`
-
-## Running Tests
-
-Run all tests:
-
-```bash
-pytest -v
-```
-
-Run unit tests:
-
-```bash
-pytest tests/unit -v
-```
-
-Run integration tests:
-
-```bash
-pytest tests/integration -v
-```
-
-## Learning Objectives
-
-This project focuses on building a strong foundation in backend development:
-
-- REST API design and HTTP fundamentals.
-- Clean and layered application architecture.
-- Separation of business logic and database operations.
-- Dependency injection and configuration management.
-- Exception handling and structured logging.
-- Database integration using SQLAlchemy.
-- Unit and integration testing.
-- Writing maintainable and scalable backend code.
-
-## Project Completion Criteria
-
-- All unit and integration tests pass.
-- CRUD operations work correctly.
-- API validation and exception handling work as expected.
-- Every request has a traceable request ID.
-- Business logic remains independent of FastAPI and the database.
-- Swagger documentation clearly describes all endpoints.
-
-## Project Status
-
-Currently under development.
-
-
-## Asynchronous runtime
-
-The `async_main` branch uses async SQLAlchemy sessions, `redis.asyncio`, and a shared `httpx.AsyncClient` managed by the FastAPI lifespan. Routes, services, repositories, authentication/session operations, rate limiting, and external API integrations use `async def` and await their I/O operations.
-
-### Async database URL
-
-For SQLite, use:
-
-```env
-DATABASE_URL=sqlite+aiosqlite:///./tasks.db
-```
-
-For PostgreSQL, use an async driver URL such as:
-
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/task_manager
-```
-
-The application also converts the previous `sqlite:///...` and `postgresql://...` URL forms to their async driver equivalents. Existing SQLite tables are initialized with SQLAlchemy metadata; this does not delete the database file. Back up your database before running schema changes.
-
-Install dependencies and run:
-
-```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-pytest -v
-```
-
-Redis must be running and `SECRET_KEY` and `WEATHER_API_KEY` must be configured in `.env`. The async HTTP client is shared for connection pooling and closed during application shutdown.
+Production database migration and deployment hardening remain in progress; this branch is not yet production-certified.

@@ -1,17 +1,23 @@
-# Virtual environment
-venv/
-.venv/
-
-# Python cache
 __pycache__/
 *.py[cod]
-*.pyc
-
-# Environment variables
+*$py.class
+.Python
+.venv/
+venv/
 .env
-
-# SQLite database
+.env.*
+!.env.example
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 *.db
-
-# VS Code settings
+*.sqlite
+*.sqlite3
+.mypy_cache/
+.ruff_cache/
+.idea/
 .vscode/
+dist/
+build/
+*.egg-info/
