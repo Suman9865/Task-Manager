@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     RATE_LIMIT_MAX_REQUESTS: int = 5
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+    GEOLOCATION_API_URL: str = "https://ipwho.is"
+    GEOLOCATION_TIMEOUT: float = 3.0
+    GEOLOCATION_MAX_RETRIES: int = 3
+    GEOLOCATION_BACKOFF_BASE: float = 0.5
 
     model_config = SettingsConfigDict(
         env_file=".env",
