@@ -1,5 +1,5 @@
 class WeatherAPIError(Exception):
-    """Base exception for weather API errors."""
+    """Base exception for weather APIerrors."""
     
 
 class WeatherAPITimeoutError(WeatherAPIError):
