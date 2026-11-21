@@ -3,9 +3,11 @@ from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.main import app
 from app import main as main_module
+from app.core.dependencies import get_current_user
+from app.core.rate_limit_dependencies import rate_limit_dependency
 from app.database import Base, get_db
+from app.main import app
 from app.models.task import Task  # noqa: F401
 from app.models.user import User  # noqa: F401
 
@@ -30,7 +32,6 @@ async def db():
 
 @pytest_asyncio.fixture
 async def client(db, monkeypatch):
-    # Keep the application's lifespan schema setup on the isolated test database.
     monkeypatch.setattr(main_module, "engine", test_engine)
 
     async def override_get_db():
@@ -45,3 +46,27 @@ async def client(db, monkeypatch):
                 yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def authenticated_client(client, db):
+    user = User(
+        username="test-user",
+        email="test-user@example.com",
+        hashed_password="test-hash",
+        is_active=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    async def override_current_user():
+        return user
+
+    app.dependency_overrides[get_current_user] = override_current_user
+    app.dependency_overrides[rate_limit_dependency] = lambda: {
+        "limit": 100,
+        "remaining": 99,
+        "reset": 0,
+    }
+    return client, user
