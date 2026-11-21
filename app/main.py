@@ -18,6 +18,7 @@ from app.logging_config import setup_logging
 from app.routes.tasks import router as task_router
 from app.middleware.request_id import RequestIDMiddleware
 from app.routes.auth import router as auth_routes
+from app.routes.weather import router as weather_routes
 
 # Initialize logging
 setup_logging()
@@ -69,6 +70,10 @@ app.include_router(task_router)
 
 # Register authentication routes
 app.include_router(auth_routes)
+
+
+# Register weather routes
+app.include_router(weather_routes)
 
 # ----------------------------------------
 # Global Exception Handlers

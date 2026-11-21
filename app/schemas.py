@@ -134,3 +134,7 @@ class LoginEmail(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+class TaskIPResponse(TaskResponse):
+    country: str | None = None
+    city: str | None = None

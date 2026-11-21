@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     GEOLOCATION_TIMEOUT: float = 3.0
     GEOLOCATION_MAX_RETRIES: int = 3
     GEOLOCATION_BACKOFF_BASE: float = 0.5
+    WEATHER_API_KEY: str
+    WEATHER_API_BASE_URL: str = "https://api.weatherapi.com/v1"
+    WEATHER_API_TIMEOUT: float = 5.0
+    WEATHER_API_MAX_RETRIES: int = 3
+    WEATHER_API_BACKOFF_BASE: float = 0.5
 
     model_config = SettingsConfigDict(
         env_file=".env",

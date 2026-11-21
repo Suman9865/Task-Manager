@@ -1,12 +1,12 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.schemas import TaskCreate, TaskResponse, TaskUpdate, TaskPatch
+from app.schemas import TaskCreate, TaskResponse, TaskUpdate, TaskPatch, TaskIPResponse
 from app.database import get_db
-
+from app.services.geolocation_service import get_ip_location
 from app.services.task_service import (
     create_task as create_task_service,
     get_tasks as get_tasks_service,
@@ -25,12 +25,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Tasks"])
 
 
-@router.post("/tasks", response_model=TaskResponse)
-def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+@router.post("/tasks", response_model=TaskIPResponse)
+def create_task(task: TaskCreate, request: Request,db: Session = Depends(get_db)):
 
     logger.info("POST /tasks - Request received")
+    client_ip = request.client.host if request.client else None
 
-    return create_task_service(db, task)
+    logger.info("Client IP: %s", client_ip)
+
+    # Get country and city using the geolocation service
+    location = get_ip_location(client_ip) if client_ip else {
+        "country": None,
+        "city": None
+    }
+
+    logger.info(
+        "Client location - Country: %s, City: %s",
+        location["country"],
+        location["city"]
+    )
+
+    created_task = create_task_service(db, task)
+
+    return {
+        "id": created_task.id,
+        "title": created_task.title,
+        "description": created_task.description,
+        "status": created_task.status,
+        "due_date": created_task.due_date,
+        "country": location["country"],
+        "city": location["city"]
+    }
 
 
 @router.get("/tasks", response_model=list[TaskResponse])
