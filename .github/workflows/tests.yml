@@ -23,10 +23,24 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: task_manager
+          POSTGRES_PASSWORD: task_manager_test
+          POSTGRES_DB: task_manager_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U task_manager -d task_manager_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       SECRET_KEY: ci-test-secret-key-change-me-please-32
       WEATHER_API_KEY: ci-test-weather-key
-      DATABASE_URL: sqlite+aiosqlite:///./ci_tasks.db
+      DATABASE_URL: postgresql+asyncpg://task_manager:task_manager_test@localhost:5432/task_manager_test
+      TEST_DATABASE_URL: postgresql+asyncpg://task_manager:task_manager_test@localhost:5432/task_manager_test
       REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +54,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Static checks
         run: ruff check --select E4,E7,E9,F821,F822,F823 app tests migrations
-      - name: Validate database migrations
+      - name: Validate PostgreSQL migrations
         run: alembic upgrade head
       - name: Run tests with coverage
         run: pytest -v --cov=app --cov-report=term-missing --cov-report=xml

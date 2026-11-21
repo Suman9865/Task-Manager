@@ -34,4 +34,10 @@ Run with `uvicorn app.main:app --reload`. API docs: `/docs`. Liveness: `/health`
 
 Run tests with `pytest -v --cov=app --cov-report=term-missing`.
 
+## Proxy and client IP configuration
+
+The application currently reads the direct ASGI peer address (`request.client.host`) for IP geolocation and IP-based authentication rate limiting. It does not trust `X-Forwarded-For` or other forwarded headers itself.
+
+When deployed behind a reverse proxy, configure the ASGI server's proxy-header support and its trusted-proxy allowlist (for example, Uvicorn's `--proxy-headers` and `--forwarded-allow-ips`) to include only known proxy addresses or networks. Never trust forwarded headers from arbitrary clients or use `*` unless the network boundary guarantees that only trusted proxies can connect to the application. No deployment behavior is changed by this documentation.
+
 Production database migration and deployment hardening remain in progress; this branch is not yet production-certified.

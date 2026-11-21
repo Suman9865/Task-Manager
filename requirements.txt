@@ -34,8 +34,8 @@ typing-inspection==0.4.5
 typing_extensions==4.16.0
 uvicorn==0.54.0
 redis==5.2.1
-aiosqlite
-asyncpg
-pytest-asyncio
-asgi-lifespan
+aiosqlite>=0.21,<1
+asyncpg>=0.30,<1
+pytest-asyncio>=1,<2
+asgi-lifespan>=2,<3
 alembic>=1.14,<2

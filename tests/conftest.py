@@ -1,3 +1,5 @@
+import os
+
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
@@ -8,18 +10,20 @@ from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.rate_limit_dependencies import rate_limit_dependency
 from app.core.redis import get_redis
-from app.database import Base, get_db
+from app.database import Base, get_db, normalize_database_url
 from app.main import app
 from app.models import Task, User  # noqa: F401
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_tasks_async.db"
+TEST_DATABASE_URL = normalize_database_url(
+    os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///./test_tasks_async.db")
+)
+test_connect_args = {"check_same_thread": False} if TEST_DATABASE_URL.startswith("sqlite+") else {}
 test_engine = create_async_engine(
-    TEST_DATABASE_URL, connect_args={"check_same_thread": False}
+    TEST_DATABASE_URL, connect_args=test_connect_args, pool_pre_ping=True
 )
 TestingSessionLocal = async_sessionmaker(
     bind=test_engine, expire_on_commit=False, autoflush=False
 )
-
 
 @pytest_asyncio.fixture
 async def db():
@@ -33,7 +37,6 @@ async def db():
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
     await redis_client.flushdb()
-
 
 @pytest_asyncio.fixture
 async def client(db, monkeypatch):
@@ -58,14 +61,11 @@ async def client(db, monkeypatch):
     finally:
         app.dependency_overrides.clear()
 
-
 @pytest_asyncio.fixture
 async def authenticated_client(client, db):
     user = User(
-        username="test-user",
-        email="test-user@example.com",
-        hashed_password="test-hash",
-        is_active=True,
+        username="test-user", email="test-user@example.com",
+        hashed_password="test-hash", is_active=True,
     )
     db.add(user)
     await db.commit()
@@ -76,8 +76,6 @@ async def authenticated_client(client, db):
 
     app.dependency_overrides[get_current_user] = override_current_user
     app.dependency_overrides[rate_limit_dependency] = lambda: {
-        "limit": 100,
-        "remaining": 99,
-        "reset": 0,
+        "limit": 100, "remaining": 99, "reset": 0,
     }
     return client, user
