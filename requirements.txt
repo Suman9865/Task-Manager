@@ -28,7 +28,7 @@ PyJWT==2.15.1
 pytest==9.2.0
 python-dotenv==1.2.4
 python-multipart==0.0.33
-SQLAlchemy==2.1.8
+SQLAlchemy[asyncio]==2.1.8
 starlette==1.10.0
 typing-inspection==0.4.5
 typing_extensions==4.16.0
