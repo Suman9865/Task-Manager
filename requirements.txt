@@ -33,7 +33,7 @@ starlette==1.10.0
 typing-inspection==0.4.5
 typing_extensions==4.16.0
 uvicorn==0.54.0
-redis==5.11.1
+redis==5.2.1
 aiosqlite
 asyncpg
 pytest-asyncio
